@@ -13,9 +13,11 @@ import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
@@ -94,34 +96,29 @@ public class ExerciseService {
 
     public List<StudentWithCoursesResponse> getAllStudentWithCourses() {
         List<Student> students = studentRepository.findAll();
-        List<StudentWithCoursesResponse> results = new ArrayList<>();
+        List<StudentCourse> studentCourses = studentCourseRepository.findAllWithCourse();
 
-        for (Student student : students) {
-            List<StudentCourse> relations = studentCourseRepository.findByStudent_Id(student.getId());
-            List<CourseResponse> courses = relations.stream()
-                    .map(sc -> new CourseResponse(
-                            sc.getCourse().getId(),
-                            sc.getCourse().getCode(),
-                            sc.getCourse().getName()
-                    ))
-                    .toList();
-
-            results.add(new StudentWithCoursesResponse(
-                    student.getId(),
-                    student.getName(),
-                    student.getNpm(),
-                    student.getGpa(),
-                    courses
+        Map<Long, List<CourseResponse>> coursesByStudentId = new HashMap<>();
+        for (StudentCourse studentCourse : studentCourses) {
+            Long studentId = studentCourse.getStudent().getId();
+            List<CourseResponse> courses = coursesByStudentId.computeIfAbsent(studentId, ignored -> new ArrayList<>());
+            courses.add(new CourseResponse(
+                    studentCourse.getCourse().getId(),
+                    studentCourse.getCourse().getCode(),
+                    studentCourse.getCourse().getName()
             ));
         }
 
+        List<StudentWithCoursesResponse> results = new ArrayList<>(students.size());
+        for (Student student : students) {
+            List<CourseResponse> courses = coursesByStudentId.getOrDefault(student.getId(), List.of());
+            results.add(new StudentWithCoursesResponse(student.getId(), student.getName(), student.getNpm(), student.getGpa(), courses));
+        }
         return results;
     }
 
     public List<String> getAllStudentName() {
-        return studentRepository.findAll().stream()
-                .map(Student::getName)
-                .toList();
+        return studentRepository.findAllNames();
     }
 
     public StudentResponse getHighestGpaStudent() {
